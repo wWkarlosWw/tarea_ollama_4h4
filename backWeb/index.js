@@ -5,34 +5,63 @@ const cors = require("cors");
 const axios = require("axios");
 
 const app = express();
-const port = 3000; // Puedes cambiar el puerto si lo deseas
+const port = 3000;
 
-const CONTEXTO_VETERINARIA = `
-Eres un asistente virtual experto en veterinaria. 
-Nombre de la Empresa: Veterinaria Mundo Animal.
-Ubicación: Calle San Martín 123, Cochabamnba, Bolivia.
-Teléfono: +591 12345678.
-Servicios: Consulta veterinaria, vacunación, desparasitación, venta de alimentos y accesorios para mascotas.
-Horario: Lunes a Viernes de 9:00 a 18:00, Sábados de 9:00 a 13:00.
-Información adicional:
-Peluquería canina y felina costo:90 Bs.
-Cuidado vetrinario: 100 Bs.  
-Vacunación de perros y gatos: 50 Bs.
-Responde únicamente preguntas relacionadas con salud, cuidado, alimentación y bienestar de animales domésticos. 
-Si la pregunta no es relevante con la veterinaria, responde amablemente que solo puedes ayudar con temas veterinarios.
+// CONTEXTO ACTUALIZADO PARA SITIO DE NOTICIAS
+const CONTEXTO_NOTICIAS = `
+Eres un asistente virtual especializado en noticias y periodismo digital.
+Nombre del Medio: Informa Hoy
+Tipo de Contenido: Portal de noticias nacionales e internacionales
+Ubicación: Av. Libertador 456, Cochabamba, Bolivia
+Teléfono: +591 4 1234567
+Email: contacto@informahoy.com
+Horario de Atención: Lunes a Viernes de 8:00 a 18:00, Sábados de 9:00 a 13:00
+
+INFORMACIÓN DE LAS NOTICIAS DISPONIBLES EN LA BASE DE DATOS:
+Las noticias se organizan en las siguientes categorías (basado en los datos existentes):
+- Tecnología e Innovación
+- Ciencia y Medio Ambiente
+- Economía y Mercados
+- Salud y Medicina
+- Cultura y Sociedad
+- Política y Gobierno
+- Deportes
+- Entretenimiento
+
+SERVICIOS DEL MEDIO:
+- Noticias actualizadas 24/7
+- Análisis y reportajes especializados
+- Newsletter diario
+- Suscripciones premium
+- Publicidad digital
+- Reportajes corporativos
+
+RESPONSABILIDADES DEL ASISTENTE:
+1. Proporcionar información sobre las noticias publicadas
+2. Ayudar a usuarios a encontrar noticias por categorías
+3. Informar sobre servicios de suscripción y publicidad
+4. Responder preguntas sobre el medio y su funcionamiento
+5. Asistir en temas de periodismo y contenido digital
+
+INSTRUCCIONES ESPECÍFICAS:
+- Responde únicamente preguntas relacionadas con noticias, periodismo y servicios del medio
+- Si la pregunta no es relevante al contexto de noticias, responde amablemente que solo puedes ayudar con temas periodísticos y de actualidad
+- Mantén un tono profesional pero accesible
+- Promueve la suscripción al newsletter cuando sea apropiado
+- Destaca la credibilidad y actualidad de la información
 `;
 
-// Middleware para analizar noel cuerpo de las peticiones JSON
+// Middleware para analizar el cuerpo de las peticiones JSON
 app.use(bodyParser.json());
 // Middleware para habilitar CORS (permite peticiones desde diferentes dominios)
 app.use(cors());
 
 // Configuración de la conexión a la base de datos MySQL
 const dbConfig = {
-  host: "localhost", // Cambia esto si tu base de datos está en otro servidor
-  user: "root", // Reemplaza con tu nombre de usuario de MySQL
-  password: "2004", // Reemplaza con tu contraseña de MySQL
-  database: "dbventas", // Reemplaza con el nombre de tu base de datos
+  host: "localhost",
+  user: "root",
+  password: "2004",
+  database: "dbventas",
   port: "3306",
 };
 
@@ -47,6 +76,20 @@ dbConnection.connect((err) => {
   console.log("Conexión a la base de datos MySQL establecida");
 });
 
+// Función para obtener información actualizada de las noticias
+const obtenerInformacionNoticias = () => {
+  return new Promise((resolve, reject) => {
+    const query = "SELECT nombre, descripcion FROM productos WHERE estado = 'A' LIMIT 10";
+    dbConnection.query(query, (error, results) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+};
+
 app.post("/ollama-prompt", async (req, res) => {
   try {
     const { prompt } = req.body;
@@ -54,14 +97,27 @@ app.post("/ollama-prompt", async (req, res) => {
       return res.status(400).json({ error: "Prompt is required" });
     }
 
-    const promptConContexto = `${CONTEXTO_VETERINARIA}\nPregunta: ${prompt}`;
+    // Obtener información actualizada de las noticias
+    let noticiasActuales = "";
+    try {
+      const noticias = await obtenerInformacionNoticias();
+      noticiasActuales = "NOTICIAS ACTUALES DISPONIBLES:\n";
+      noticias.forEach((noticia, index) => {
+        noticiasActuales += `${index + 1}. ${noticia.nombre}: ${noticia.descripcion}\n`;
+      });
+    } catch (error) {
+      console.error("Error al obtener noticias:", error);
+      noticiasActuales = "Información de noticias temporalmente no disponible.\n";
+    }
+
+    const contextoCompleto = `${CONTEXTO_NOTICIAS}\n${noticiasActuales}\n\nPregunta del usuario: ${prompt}\n\nRespuesta:`;
 
     // Llamada a la API de Ollama (stream: true)
     const ollamaResponse = await axios.post(
       "http://127.0.0.1:11434/api/generate",
       {
         model: "gemma3",
-        prompt: promptConContexto,
+        prompt: contextoCompleto,
         stream: true,
       },
       { responseType: "stream" }
@@ -69,7 +125,6 @@ app.post("/ollama-prompt", async (req, res) => {
 
     let result = "";
     ollamaResponse.data.on("data", (chunk) => {
-      // Cada línea es un JSON
       const lines = chunk.toString().split("\n").filter(Boolean);
       for (const line of lines) {
         try {
@@ -93,7 +148,7 @@ app.post("/ollama-prompt", async (req, res) => {
   }
 });
 
-//Implememtamos un servicio
+// Servicios existentes para contactos y productos (sin cambios)
 app.post("/api/registro", (req, res) => {
   const { name, email, message } = req.body;
   console.log("Registro");
@@ -150,7 +205,8 @@ app.post("/api/save", (req, res) => {
     });
   });
 });
-//Crear un servicio para obtener todos los registros de la tabla productos
+
+// Servicio para obtener todas las noticias (productos)
 app.get("/api/productos", (req, res) => {
   const query = "SELECT * FROM productos";
   dbConnection.query(query, (error, results) => {
@@ -159,6 +215,22 @@ app.get("/api/productos", (req, res) => {
       return res
         .status(500)
         .json({ error: "Error al obtener los datos de la base de datos." });
+    }
+
+    res.status(200).json(results);
+  });
+});
+
+// Nuevo servicio para obtener noticias por categoría (basado en el nombre/descripción)
+app.get("/api/noticias/categoria/:categoria", (req, res) => {
+  const categoria = req.params.categoria;
+  const query = "SELECT * FROM productos WHERE (nombre LIKE ? OR descripcion LIKE ?) AND estado = 'A'";
+  const likeTerm = `%${categoria}%`;
+  
+  dbConnection.query(query, [likeTerm, likeTerm], (error, results) => {
+    if (error) {
+      console.error("Error al obtener noticias por categoría:", error);
+      return res.status(500).json({ error: "Error al obtener las noticias." });
     }
 
     res.status(200).json(results);
